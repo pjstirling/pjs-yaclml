@@ -134,6 +134,7 @@
     (with-output-file +generated-package-path+
       (o "(defpackage #:<~%")
       (with-indent 
+	(o "(:use)~%")
 	(o "(:export #:as-html")
 	(with-indent* 9
 	  (o "~&#:as-is")

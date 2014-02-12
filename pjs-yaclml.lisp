@@ -8,7 +8,7 @@
   `(let ((*yaclml-stream* ,stream))
      ,@body))
 
-(defmacro <5:as-html (&environment env &rest contents)
+(defmacro <:as-html (&environment env &rest contents)
   (let ((contents (mapcar (lambda (form)
 			    (let ((form (macroexpand form env)))
 			      `(<ai ,(if (compile-time-constant form)
@@ -20,9 +20,9 @@
        ,@(merge-ai contents))))
 
 (defmacro <ah (&rest rest)
-  `(<5:as-html ,@rest))
+  `(<:as-html ,@rest))
 
-(defun <5:as-is (&rest args)
+(defun <:as-is (&rest args)
   (dolist (arg args)
     (<ai arg)))
 
