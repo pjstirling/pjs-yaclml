@@ -10,9 +10,6 @@
 (defparameter +generated-tags-path+
   (relative-path "generated-tags.lisp"))
 
-(defparameter +generated-package-path+
-  (relative-path "generated-package.lisp"))
-
 (defparameter +generated-entities-path+
   (relative-path "entities.sexp"))
 
@@ -131,23 +128,23 @@
 (defun generate-tag-code ()
   (let ((tags (parse-element-list-page (fetch-page +elements-url+
 						   +elements-file-path+))))
-    (with-output-file +generated-package-path+
+    (with-output-file +generated-tags-path+ 
       (o "(defpackage #:<~%")
       (with-indent 
 	(o "(:use)~%")
+	(o "(:import-from #:pjs-yaclml #:as-html #:as-is)~%")
 	(o "(:export #:as-html")
 	(with-indent* 9
 	  (o "~&#:as-is")
 	  (dolist (tag tags)
 	    (o "~&#:~a" (tag-name tag)))))
-      (o "))~%~%"))
-    (with-output-file +generated-tags-path+ 
+      (o "))~%~%")
       (o "(in-package #:pjs-yaclml)~%~%")
       (dolist (tag tags)
 	(o (if (tag-empty tag)
-	       "(deftag <:~a t"
+	       "(def-std-tag <:~a t"
 	       ;; else
-	       "(deftag <:~a nil")
+	       "(def-std-tag <:~a nil")
 	   (tag-name tag))
 	(dolist (attr (tag-attributes tag))
 	  (o "~&  ~a" attr))

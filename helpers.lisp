@@ -7,10 +7,6 @@
       (characterp form)
       (numberp form)))
 
-(declaim (inline <ai))
-(defun <ai (arg)
-  (princ arg *yaclml-stream*))
-
 ;; (/= (h-t-c *entity-char-map*)
 ;;     (+ (h-t-c *char-entity-map*)
 ;;        (h-t-c *double-char-entity-map*)))  
@@ -54,75 +50,43 @@
 
 (defun escape-as-html (str)
   (declare (optimize (speed 3)
-		     (debug 0)))
-  (macrolet ((incf* (place &optional val)
-	       `(with-no-compiler-notes
-		  ,(if val
-		       `(incf ,place ,val)
-		       ;; else
-		       `(incf ,place)))))
-    (if (null str)
-	nil
-	;; else
-	(if (not (stringp str))
-	    (escape-as-html (princ-to-string str))
-	    ;; else
-	    (locally
-		(declare (type simple-string str))
-	      (let* ((input-length (length str))
-		     (input-length-1 (1- input-length))
-		     (length 0)
-		     (buffer (make-array input-length :fill-pointer 0))) 
-		(do ((i 0 (incf i)))
-		    ((= i input-length))
-		  (declare (type fixnum length i)
-			   (type simple-vector +safe-char-list+))
-		  (let ((char (char str i)))
-		    (if (find char +safe-char-list+)
-			(progn
-			  (vector-push-extend char buffer)
-			  (incf* length))
-			;; else
-			(if (< i input-length-1)
-			    (aif (gethash (list char
-						(char str (1+ i)))
-					  *double-char-entity-map*)
-				 (locally (declare (type simple-string it))
-				   (vector-push it buffer)
-				   (incf* length (length it)))
-				 ;; else
-				 (aif (gethash (list char)
-					       *char-entity-map*)
-				      (locally (declare (type simple-string it))
-					(vector-push it buffer)
-					(incf* length (length it)))
-				      ;; else
-				      (progn
-					(vector-push char buffer)
-					(incf* length))))
-			    ;; else
-			    (aif (gethash (list char)
-					  *char-entity-map*)
-				 (locally (declare (type simple-string it))
-				   (vector-push it buffer)
-				   (incf* length (length it)))
-				 ;; else
-				 (progn
-				   (vector-push char buffer)
-				   (incf* length)))))))
-		(let ((result (make-string length))
-		      (i 0))
-		  (dovector (el buffer)
-		    (declare (type (or character simple-string) el))
-		    (if (characterp el)
-			(progn
-			  (setf (char result i) el)
-			  (incf i))
-			;; else
-			(dovector (ch el)
-			  (setf (char result i) ch)
-			  (incf i))))
-		  result)))))))
+		     (safety 0)))
+  (cond
+    ((null str)
+     nil)
+    ((not (stringp str))
+     (escape-as-html (princ-to-string str)))
+    (t
+     (with-output-to-string (s)
+       ;; can't use DOVECTOR because there are some double char entities, so we 
+       ;; need to incf count var in loop, and DOTIMES is allowed to bind the var
+       ;; rather than mutate
+       (let* ((input-length (length str))
+	      (input-length-1 (1- input-length))
+	      (safe-char-list +safe-char-list+))
+	 (declare (type (mod #.array-dimension-limit) input-length input-length-1)
+		  (type (simple-array character) safe-char-list))
+	 (do ((i 0 (incf i)))
+	     ((= i input-length))
+	   (declare (type (mod #.array-dimension-limit) i))
+	   (let* ((ch (with-no-compiler-notes
+			(char str i)))
+		  (double-ch (when (< i input-length-1)
+			       (list ch
+				     (with-no-compiler-notes
+				       (char str (1+ i)))))))
+	     (cond
+	       ((find ch safe-char-list)
+		(write-char ch s))
+	       ((and double-ch
+		     (awhen (gethash double-ch *double-char-entity-map*)
+		       (write-sequence it s)))
+		(incf i))
+	       ((awhen (gethash ch *char-entity-map*)
+		  (write-sequence it s))
+		t)
+	       (t
+		(write-char ch s))))))))))
 
 (defun merge-progns (form)
   (flet ((progn-form-p (form)

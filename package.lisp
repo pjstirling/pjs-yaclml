@@ -4,8 +4,13 @@
   (:export #:with-yaclml-output-to-string
 	   #:with-yaclml-stream
 	   #:*yaclml-stream*
-	   #:output-lhtml
 
+	   #:deftag
+	   #:def-std-tag
+	   #:output-lhtml
+	   #:as-html
+	   #:as-is
+	   #:html-block	   
 	   #:custom-attr
 	   #:tag-info
 	   #:tag-info-name
@@ -28,5 +33,5 @@
 (defparameter *char-entity-map* nil)
 
 (defparameter +safe-char-list+
-  (sort (copy-seq #(#\. #\: #\/ #\= #\! #\, #\( #\)))
+  (sort (copy-seq ".:/\\=!,()")
 	#'char<))

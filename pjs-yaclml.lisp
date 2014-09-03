@@ -1,14 +1,17 @@
 (in-package #:pjs-yaclml)
 
 (defmacro with-yaclml-output-to-string (&body body)
+  "Return a string containing all the output"
   `(with-output-to-string (*yaclml-stream*)
-     ,@body))
+     (html-block ,@body)))
 
 (defmacro with-yaclml-stream (stream &body body)
+  "Send all output to STREAM"
   `(let ((*yaclml-stream* ,stream))
-     ,@body))
+     (html-block ,@body)))
 
-(defmacro <:as-html (&environment env &rest contents)
+(defmacro as-html (&environment env &rest contents)
+  "PRINC-TO-STRING non-strings and then html-encode each form and output"
   (let ((contents (mapcar (lambda (form)
 			    (let ((form (macroexpand form env)))
 			      `(<ai ,(if (compile-time-constant form)
@@ -16,15 +19,29 @@
 					 ;; else
 					 `(escape-as-html ,form)))))
 			  contents)))
-    `(progn
-       ,@(merge-ai contents))))
+    `(html-block ,@contents)))
 
-(defmacro <ah (&rest rest)
-  `(<:as-html ,@rest))
+(declaim (inline <ai))
+(defun <ai (arg)
+  (princ arg *yaclml-stream*))
 
-(defun <:as-is (&rest args)
-  (dolist (arg args)
-    (<ai arg)))
+(defmacro as-is (&rest args)
+  "PRINC all args without html-encoding"
+  `(html-block
+     ,@(mapcar (lambda (arg)
+		 `(<ai ,arg))
+	       args)))
+
+(defmacro html-block (&environment env &body body)
+  "Merge as much of compile-time-constant output into as few calls as possible"
+  (merge-ai (merge-progns `(progn
+			     ,@(mapcar (lambda (form)
+					 (let ((form (macroexpand form env)))
+					   (if (stringp form)
+					       `(as-html ,form)
+					       ;; else
+					       form)))
+				       body)))))
 
 (defclass tag-info ()
   ((name :initarg :name
@@ -73,46 +90,47 @@
       (values (collect) contents))))
 
 (defun deftag-template (name empty-tag attrs body)
-  (let ((attrs (remove-if #'null attrs :key #'second)))
-    (multiple-value-bind (compile-time-attrs run-time-attrs)
-	(partition (lambda (attr)
-		     (compile-time-constant (second attr)))
-		   attrs)
-      `(progn
-	 (<ai ,(sconc "<" (symbol-name* name)))
-	 ,@(mapcar (lambda (attr)
-		     `(progn
-			(<ai ,(sconc " " (first attr)))
-			,(unless (eq t (second attr))
-			   `(<ai ,(sconc "=\""
-					 (escape-as-html (second attr))
-					 "\"")))))
-		   compile-time-attrs)
-	 ,@(mapcar (lambda (attr)
-		     `(awhen ,(second attr)
-			(<ai ,(sconc " " (first attr)))
-			(unless (eq t it)
-			  (<ai "=\"")
-			  (<ai (escape-as-html it))
-			  (<ai "\""))))
-		   run-time-attrs)
-	 (<ai ">")
-	 ,(if empty-tag
-	      (when body
-		(error "body provided for void element ~a ~a" name body))
-	      ;; else
-	      `(progn
-		 ,@(mapcar (lambda (form)
-			     (if (compile-time-constant form)
-				 `(<ai ,(escape-as-html form))
-				 ;; else
-				 form))
-			   body)
-		 (<ai ,(sconc "</" (symbol-name* name) ">"))))))))
+  (bind ((attrs (remove-if #'null attrs :key #'second))
+	 (:mv (compile-time-attrs run-time-attrs)
+	      (partition (lambda (attr)
+			   (compile-time-constant (second attr)))
+			 attrs)))
+    `(html-block 
+       (<ai ,(sconc "<" (symbol-name* name)))
+       ,@(mapcar (lambda (attr)
+		   `(progn
+		      (<ai ,(sconc " " (first attr)))
+		      ,(unless (eq t (second attr))
+			 `(<ai ,(sconc "=\""
+				       (escape-as-html (second attr))
+				       "\"")))))
+		 compile-time-attrs)
+       ,@(mapcar (lambda (attr)
+		   `(awhen ,(second attr)
+		      (<ai ,(sconc " " (first attr)))
+		      (unless (eq t it)
+			(<ai "=\"")
+			(<ai (escape-as-html it))
+			(<ai "\""))))
+		 run-time-attrs)
+       (<ai ">")
+       ,(if empty-tag
+	    (when body
+	      (error "body provided for void element ~a ~a" name body))
+	    ;; else
+	    `(progn
+	       ,@(mapcar (lambda (form)
+			   (if (compile-time-constant form)
+			       `(<ai ,(escape-as-html form))
+			       ;; else
+			       form))
+			 body)
+	       (<ai ,(sconc "</" (symbol-name* name) ">")))))))
 
 
 (defmacro deftag (name empty-tag &body attrs)
-  (let ((attrs (remove-duplicates (append +global-attributes+ attrs))))
+  "Create a macro NAME that prints an html tag named (STRING-DOWNCASE (SYMBOL-NAME NAME)). EMPTY says that the tag has no content and prints without a closing tag. ATTRS is a list of symbols that name valid attributes to the tag which can be passed as if keyword args"
+  (let ((attrs (remove-duplicates attrs)))
     `(progn
        (setf (gethash ,(symbol-name name) *tag-info*)
 	     (make-instance 'tag-info
@@ -120,22 +138,23 @@
 			    :attrs ',(mapcar #'symbol-name attrs)
 			    :empty ,empty-tag))
        (defmacro ,name (&environment env &body contents)
-	 (multiple-value-bind (attrs contents)
-	     (attrs-and-contents ',(mapcar #'symbol-name* attrs)
-				 (mapcar (lambda (form)
-					   (macroexpand form env))
-					 contents))
-	   (let* ((template (deftag-template ',name
-			      ,empty-tag
-			      attrs
-			      contents))
-		  (merged-progns (merge-progns template))
-		  (merged-ai (merge-ai merged-progns)))
-	     merged-ai))))))
+	 (bind ((:mv (attrs contents)
+		     (attrs-and-contents ',(mapcar #'symbol-name* attrs)
+					 (mapcar (lambda (form)
+						   (macroexpand form env))
+						 contents))))
+	   (deftag-template ',name
+	     ,empty-tag
+	     attrs
+	     contents))))))
+
+(defmacro def-std-tag (name empty-tag &body attrs)
+  "Defines a tag macro including the html5 global attributes in addition to those passed in ATTRS."
+  `(deftag ,name ,empty-tag ,@attrs ,@+global-attributes+))
 
 (defun output-unhandled-lhtml-node (node-name)
   (<ai "<!-- unhandled tag kind ")
-  (<ah node-name)
+  (as-html node-name)
   (<ai "-->"))
 
 (defun output-lhtml-attr (attr tag-info error-stream)
@@ -148,7 +167,7 @@
 	  (<ai name)
 	  (unless (eq t val)
 	    (<ai "=\"")
-	    (<ah val)
+	    (as-html val)
 	    (<ai "\"")))
 	;; else
 	(progn
@@ -197,9 +216,10 @@
 	  (output-unhandled-lhtml-node node-name)))))
 
 (defun output-lhtml (node)
+  "Output an lhtml node, in the style of closure-html. Specifically a either a string, which is html encoded, or a list matching (NAME ((ATTR . VALUE)*) CHILDREN*) where NAME is a keyword naming the element type, and ATTR is a keyword naming the attribute."
   (cond
     ((stringp node)
-     (<ah node))
+     (as-html node))
     ((listp node)
      (output-lhtml-node node))
     (t
