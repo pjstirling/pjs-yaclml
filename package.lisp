@@ -33,5 +33,5 @@
 (defparameter *char-entity-map* nil)
 
 (defparameter +safe-char-list+
-  (sort (copy-seq #(#\. #\: #\/ #\\ #\= #\! #\, #\( #\) #\Newline))
+  (sort (coerce #(#\. #\: #\/ #\\ #\= #\! #\, #\( #\) #\Newline) 'simple-string)
 	#'char<))

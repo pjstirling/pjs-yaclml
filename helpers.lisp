@@ -50,7 +50,7 @@
 
 (defun escape-as-html (str)
   (declare (optimize (speed 3)
-		     (safety 0)))
+		     (safety 3)))
   (cond
     ((null str)
      nil)
@@ -82,7 +82,7 @@
 		     (awhen (gethash double-ch *double-char-entity-map*)
 		       (write-sequence it s)))
 		(incf i))
-	       ((awhen (gethash ch *char-entity-map*)
+	       ((awhen (gethash (list ch) *char-entity-map*)
 		  (write-sequence it s))
 		t)
 	       (t
