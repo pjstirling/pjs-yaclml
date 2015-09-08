@@ -56,6 +56,8 @@
      nil)
     ((not (stringp str))
      (escape-as-html (princ-to-string str)))
+    ((string= str "")
+     "")
     (t
      (with-output-to-string (s)
        ;; can't use DOVECTOR because there are some double char entities, so we 

@@ -53,12 +53,12 @@
 
 (defmethod print-object ((info tag-info) stream)
   (let ((*standard-output* stream))
-    (print-unreadable-object (info t)
-      (princ "tag-info")
+    (print-unreadable-object (info t :type t :identity t)
+      (princ "tag-info ")
       (princ (tag-info-name info))
-      (princ "attrs: ")
+      (princ " attrs: ")
       (princ (tag-info-attrs info))
-      (princ "empty:")
+      (princ " empty: ")
       (princ (tag-info-empty info)))))
 
 (defun attrs-and-contents (attr-names contents)
