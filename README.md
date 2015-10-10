@@ -27,7 +27,7 @@ changes to the spec. e.g. when a new element is added.
 
 Example usage (once the package PJS-YACLML has been loaded):
 
-```
+```common-lisp
 (yaclml:with-yaclml-output-to-string
   (<:as-is "<!DOCTYPE html>" #\Newline)
   (<:html
@@ -41,3 +41,21 @@ Example usage (once the package PJS-YACLML has been loaded):
 	  (<:li (<:as-html i))))))))
       
 ```
+
+Slightly Longer
+===============
+
+YACLML uses a special variable to choose where to send its output, and provides two ways to bind it:
+
+1. (PJS-YACLML:WITH-YACLML-OUTPUT-TO-STRING (&body body)) This returns all output as a string.
+2. (PJS-YACLML:WITH-YACLML-STREAM (stream &body body)) This sends all output to the provided stream.
+
+There are several ways to send output to YACLML, these symbols all live in the "<" package (which is intended to evoke html syntax, I LOVE common-lisp naming flexibility):
+
+1. (<:AS-IS (&rest forms)) This PRINCs each form unchanged to output
+2. (<:AS-HTML (&rest forms)) This first PRINCs (if required) each form to produce a string, then html-encodes it, before sending it to output.
+3. An html form; by which is meant a lisp form starting with a symbol, from the "<" package, that names an html element. Attributes may be specified by keyword-value pairs, For boolean attributes use T as the value. If the value provided for an attribute is NIL it will be completely absent from the output.
+4. Strings lexically within an html form will be interpreted as if they were inside an <:AS-HTML form.
+
+YACLML will attempt to aggressively coalesce output calls by macroexpanding each sub-form and flattening PROGNs. You may access this functionality by wrapping code in a PJS-YACLML:HTML-BLOCK form.
+
