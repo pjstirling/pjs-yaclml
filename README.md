@@ -29,7 +29,7 @@ Example usage (once the package PJS-YACLML has been loaded):
 
 ```common-lisp
 (yaclml:with-yaclml-output-to-string
-  (<:as-is "<!DOCTYPE html>" #\Newline)
+  (<:!doctype-html)
   (<:html
     (<:head
       (<:title "Hi there!")
@@ -52,10 +52,11 @@ YACLML uses a special variable to choose where to send its output, and provides 
 
 There are several ways to send output to YACLML, these symbols all live in the "<" package (which is intended to evoke html syntax, I LOVE common-lisp naming flexibility):
 
-1. (<:AS-IS (&rest forms)) This PRINCs each form unchanged to output
-2. (<:AS-HTML (&rest forms)) This first PRINCs (if required) each form to produce a string, then html-encodes it, before sending it to output.
-3. An html form; by which is meant a lisp form starting with a symbol, from the "<" package, that names an html element. Attributes may be specified by keyword-value pairs, For boolean attributes use T as the value. If the value provided for an attribute is NIL it will be completely absent from the output.
-4. Strings lexically within an html form will be interpreted as if they were inside an <:AS-HTML form.
+1. (<:!doctype-html) Outputs the html5 doctype
+2. (<:AS-IS (&rest forms)) This PRINCs each form unchanged to output
+3. (<:AS-HTML (&rest forms)) This first PRINCs (if required) each form to produce a string, then html-encodes it, before sending it to output.
+4. An html form; by which is meant a lisp form starting with a symbol, from the "<" package, that names an html element. Attributes may be specified by keyword-value pairs, For boolean attributes use T as the value. If the value provided for an attribute is NIL it will be completely absent from the output.
+5. Strings lexically within an html form will be interpreted as if they were inside an <:AS-HTML form.
 
 YACLML will attempt to aggressively coalesce output calls by macroexpanding each sub-form and flattening PROGNs. You may access this functionality by wrapping code in a PJS-YACLML:HTML-BLOCK form.
 

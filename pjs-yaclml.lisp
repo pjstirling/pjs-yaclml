@@ -32,16 +32,42 @@
 		 `(<ai ,arg))
 	       args)))
 
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defun html-block-walker (env form)
+    "MACROEXPAND form, but discard the expansion unless it's a form we
+care about (for prettyness)"
+    (let ((expanded (macroexpand form env)))
+      (typecase expanded
+	(string
+	 `(<ai ,(escape-as-html expanded)))
+	(cons
+	 (case (first expanded)
+	   (progn
+	     (mapcar (lambda (form)
+		       (html-block-walker env form))
+		     expanded))
+	   (<ai
+	    expanded)
+	   (t
+	    form)))
+	(t
+	 form)))))
+
 (defmacro html-block (&environment env &body body)
-  "Merge as much of compile-time-constant output into as few calls as possible"
-  (merge-ai (merge-progns `(progn
-			     ,@(mapcar (lambda (form)
-					 (let ((form (macroexpand form env)))
-					   (if (stringp form)
-					       `(as-html ,form)
-					       ;; else
-					       form)))
-				       body)))))
+  (->> `(progn ,@body)
+       (html-block-walker env)
+       merge-progns
+       merge-ai))
+
+#+nil
+(html-block
+  (<:div
+    (<:h1 :style (foo)
+      "hi there")
+    (dolist (el '(1 2 3))
+      (<:p (<:as-html el)))
+    "blarg")
+  "blorg")
 
 (defclass tag-info ()
   ((name :initarg :name
@@ -69,27 +95,24 @@
 	(let* ((first (first contents))
 	       (name (and (keywordp first)
 			  (symbol-name* first))))
-	  (if (and name
-		   (member name
-			   attr-names
-			   :test #'string=))
-	      (progn
-		(pop contents)
-		(collect (list name
-			       (pop contents))))
-	      ;; else
-	      (if (and (listp first)
-		       (eq (first first)
-			   'custom-attr))
-		  (progn
-		    (collect (list (second first)
-				   (third first)))
-		    (pop contents))
-		  ;; else
-		  (setf completed t)))))
+	  (cond
+	    ((and name
+		  (member name
+			  attr-names
+			  :test #'string=))
+	     (pop contents)
+	     (collect (list name
+			    (pop contents))))
+	    ((custom-attr-p first)
+	     (collect (list (second first)
+			    (third first)))
+	     (pop contents))
+	    (t
+	     (setf completed t)))))
       (values (collect) contents))))
 
 (defun deftag-template (name empty-tag attrs body)
+  "Avoid the need for the dreaded double-backquote!"
   (bind ((attrs (remove-if #'null attrs :key #'second))
 	 (:mv (compile-time-attrs run-time-attrs)
 	      (partition (lambda (attr)
@@ -137,12 +160,10 @@
 			    :name ,(symbol-name name)
 			    :attrs ',(mapcar #'symbol-name attrs)
 			    :empty ,empty-tag))
-       (defmacro ,name (&environment env &body contents)
+       (defmacro ,name (&body contents)
 	 (bind ((:mv (attrs contents)
 		     (attrs-and-contents ',(mapcar #'symbol-name* attrs)
-					 (mapcar (lambda (form)
-						   (macroexpand form env))
-						 contents))))
+					 contents)))
 	   (deftag-template ',name
 	     ,empty-tag
 	     attrs
@@ -216,7 +237,7 @@
 	  (output-unhandled-lhtml-node node-name)))))
 
 (defun output-lhtml (node)
-  "Output an lhtml node, in the style of closure-html. Specifically a either a string, which is html encoded, or a list matching (NAME ((ATTR . VALUE)*) CHILDREN*) where NAME is a keyword naming the element type, and ATTR is a keyword naming the attribute."
+  "Output an lhtml node, in the style of closure-html. Specifically a either a string, which is html encoded, or a list matching (NAME ((ATTR VALUE)*) CHILDREN*) where NAME is a keyword naming the element type, and ATTR is a keyword naming the attribute."
   (cond
     ((stringp node)
      (as-html node))
@@ -224,3 +245,6 @@
      (output-lhtml-node node))
     (t
      (error "unhandled case ~a in output-lhtml" node))))
+
+(defmacro !doctype-html ()
+  `(as-is "<!DOCTYPE html>" #\Newline))

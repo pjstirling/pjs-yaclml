@@ -10,7 +10,9 @@
 	   #:output-lhtml
 	   #:as-html
 	   #:as-is
-	   #:html-block	   
+	   #:!doctype-html
+	   #:escape-as-html
+	   #:html-block
 	   #:custom-attr
 	   #:tag-info
 	   #:tag-info-name

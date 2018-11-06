@@ -50,21 +50,25 @@
 				(read-line s nil 'end-of-file)))
 	       (collect line))))))
 
-(defun fetch-page (url path)
-  (let* ((mtime (or (and (cl-fad:file-exists-p path)
-			 (file-write-date path))
-		    0))
-	 (url-mtime (fetch-url-mtime url)))
-    (if (or (zerop mtime)
-	    (null url-mtime)
-	    (< mtime url-mtime))
-	(with-open-file (s path :if-exists :supersede :direction :output)
-	  (multiple-value-bind (reply status) (drakma:http-request url)
-	    (unless (= 200 status)
-	      (error "couldn't fetch list"))
-	    (write-sequence reply s)))
-	;; else
-	(file-contents path))))
+(defun fetch-page (url path use-cached)
+  (if (and use-cached
+	   (probe-file path))
+      (file-contents path)
+      ;; else
+      (let* ((mtime (or (and (cl-fad:file-exists-p path)
+			     (file-write-date path))
+			0))
+	     (url-mtime (fetch-url-mtime url)))
+	(if (or (zerop mtime)
+		(null url-mtime)
+		(< mtime url-mtime))
+	    (with-open-file (s path :if-exists :supersede :direction :output)
+	      (multiple-value-bind (reply status) (drakma:http-request url)
+		(unless (= 200 status)
+		  (error "couldn't fetch list"))
+		(write-sequence reply s)))
+	    ;; else
+	    (file-contents path)))))
 
 (defclass tag ()
   ((name :initarg :name
@@ -102,53 +106,36 @@
 									      attributes)))
 					   (collect attr)))))))))
 
-(defvar *indent* 0)
-
-(defun o (format &rest args)
-  (when (string= (subseq format 0 2)
-		 "~&")
-    (format t "~&")
-    (setf format (subseq format 2)))
-  (dotimes (i *indent*)
-    (format t " "))
-  (apply #'format t format args))
-
-(defmacro with-indent* (increment &body body)
-  `(let ((*indent* (+ *indent* ,increment)))
-     ,@body))
-
-(defmacro with-indent (&body body)
-  `(with-indent* 2
-     ,@body))
-
 (defmacro with-output-file (path &body body)
   `(with-open-file (*standard-output* ,path :direction :output :if-exists :supersede)
      ,@body))
 
-(defun generate-tag-code ()
-  (let ((tags (parse-element-list-page (fetch-page +elements-url+
-						   +elements-file-path+))))
-    (with-output-file +generated-tags-path+ 
-      (o "(defpackage #:<~%")
-      (with-indent 
-	(o "(:use)~%")
-	(o "(:import-from #:pjs-yaclml #:as-html #:as-is)~%")
-	(o "(:export #:as-html")
-	(with-indent* 9
-	  (o "~&#:as-is")
-	  (dolist (tag tags)
-	    (o "~&#:~a" (tag-name tag)))))
-      (o "))~%~%")
-      (o "(in-package #:pjs-yaclml)~%~%")
+(defun output-tag-code (tags)
+  (with-output-file +generated-tags-path+
+    (let ((*print-case* :downcase)
+	  (*package* (find-package '#:pjs-yaclml-generator)))
+      (print `(defpackage #:<
+		(:use)
+		(:import-from #:pjs-yaclml #:as-html #:as-is #:!doctype-html)
+		(:export #:as-html
+			 #:as-is
+			 #:!doctype-html
+			 ,@ (mapcar #'make-symbol
+				    (mapcar #'string-upcase
+					    (mapcar #'tag-name tags))))))
+      (format t "~%~%(in-package #:pjs-yaclml)~%~%")
       (dolist (tag tags)
-	(o (if (tag-empty tag)
-	       "(def-std-tag <:~a t"
-	       ;; else
-	       "(def-std-tag <:~a nil")
-	   (tag-name tag))
-	(dolist (attr (tag-attributes tag))
-	  (o "~&  ~a" attr))
-	(o ")~%~%")))))
+	(pprint-logical-block (*standard-output* nil :prefix "(" :suffix ")")
+	  (format t "def-std-tag <:~a ~a" (tag-name tag) (not (not (tag-empty tag))))
+	  (dolist (attr (tag-attributes tag))
+	    (format t "~&  #:~a" attr)))
+	(format t "~%~%")))))
+
+(defun generate-tag-code (use-cached)
+  (let ((tags (parse-element-list-page (fetch-page +elements-url+
+						   +elements-file-path+
+						   use-cached))))
+    (output-tag-code tags)))
 
 (defclass entity ()
   ((name :initarg :name
@@ -187,31 +174,35 @@
 				:name name
 				:chars chars))))))
 
-(defun generate-entity-code ()
+(defun output-entity-code (entities ones twos)
+  (with-output-file +generated-entities-path+
+    (format t "; entities ~w~%" (length entities))
+    (format t ";; single char entities ~w~%" (length ones))
+    (format t  "(")
+    (dolist (entity ones)
+      (format t "~w ~a~%" (entity-name entity)
+	      (char-code (first (entity-chars entity)))))
+    (format t ")~%;; double-char entities ~w~%" (length twos))
+    (format t "(")
+    (dolist (entity twos)
+      (let ((chars (entity-chars entity)))
+	(format t "~w ~a ~a~%"
+		(entity-name entity)
+		(char-code (first chars))
+		(char-code (second chars)))))
+    (format t ")~%")))
+
+(defun generate-entity-code (use-cached)
   (let ((entities (parse-entity-list-page (fetch-page +entities-url+
-						      +entities-file-path+))))
+						      +entities-file-path+
+						      use-cached))))
     (multiple-value-bind (ones twos)
 	(partition (lambda (entity)
 		     (= (length (entity-chars entity))
 			1))
 		   entities)
-      (with-output-file +generated-entities-path+
-	(format t "; entities ~w~%" (length entities))
-	(format t ";; single char entities ~w~%" (length ones))
-	(format t  "(")
-	(dolist (entity ones)
-	  (format t "~w ~a~%" (entity-name entity)
-		  (char-code (first (entity-chars entity)))))
-	(format t ")~%;; double-char entities ~w~%" (length twos))
-	(format t "(")
-	(dolist (entity twos)
-	  (let ((chars (entity-chars entity)))
-	    (format t "~w ~a ~a~%"
-		    (entity-name entity)
-		    (char-code (first chars))
-		    (char-code (second chars)))))
-	(format t ")~%")))))
+      (output-entity-code entities ones twos))))
 
-(defun generate-code ()
-  (generate-entity-code)
-  (generate-tag-code))
+(defun generate-code (&optional use-cached)
+  (generate-entity-code use-cached)
+  (generate-tag-code use-cached))
