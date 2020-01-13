@@ -17,7 +17,7 @@
   (relative-path "section-index.html"))
 
 (defparameter +elements-url+
-  "http://developers.whatwg.org/section-index.html")
+  "https://html.spec.whatwg.org/dev/indices.html")
 
 (defparameter +entities-file-path+
   (relative-path "named-character-references.html"))
@@ -78,6 +78,18 @@
    (attributes :initarg :attrs
 	       :reader tag-attributes)))
 
+(defun dom-deep-node-text (node)
+  (let (parts)
+    (labels ((handle (node)
+	       (dolist (child (dom-children node))
+		 (if (stringp child)
+		     (push child parts)
+		     (handle child)))))
+      (handle node)
+      (apply #'concatenate
+		'string
+		(nreverse parts)))))
+
 (defun parse-element-list-page (data)
   (let* ((*document* (chtml:parse data (chtml:make-lhtml-builder)))
 	 (table (dom-find-if (dom-node-of-tag :table)))
@@ -94,10 +106,10 @@
 				     :td)))
 			   row)
 	(declare (ignore description categories parents interface))
-	(dolist (element-name (dom-find-all-if (dom-node-of-tag :a)
+	(dolist (element-name (dom-find-all-if (dom-node-of-tag :code)
 					       element))
 	  (collect (make-instance 'tag 
-				  :name (dom-node-text element-name)
+				  :name (dom-deep-node-text element-name)
 				  :empty (string= (dom-text-node-p children)
 						  "empty")
 				  :attrs (dolist-c (attr (mapcar (lambda (node)

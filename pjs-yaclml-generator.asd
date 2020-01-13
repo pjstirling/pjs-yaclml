@@ -1,4 +1,5 @@
-(ql:quickload '(#:drakma #:cl-fad #:simple-date-time #:closure-html))
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (ql:quickload '(#:drakma #:cl-fad #:simple-date-time #:closure-html)))
 
 (asdf:defsystem #:pjs-yaclml-generator
   :serial t
